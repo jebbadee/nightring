@@ -243,7 +243,7 @@ const ENDPOINTS=[
  {id:'rest_mode_period',label:'Rest mode periods',       mode:'date'},
  {id:'ring_configuration',label:'Ring hardware config',  mode:'none'}
 ];
-let state={token:null,days:7,data:{}};
+let state={token:null,days:7,data:{},errors:{}};
 
 /* ============ safe storage (works in Safari; silently skipped if sandboxed) ============ */
 const store={
@@ -298,7 +298,7 @@ async function fetchEndpoint(ep){
   if(ep.mode==='none'){
     const r=await fetch(apiBase()+ep.id,{headers});
     if(r.status===401)throw{auth:true};
-    if(!r.ok)return{__error:r.status};
+    if(!r.ok){state.errors[ep.id]=r.status;return[];}
     const j=await r.json();
     return j.data?j.data:[j];
   }
@@ -312,7 +312,7 @@ async function fetchEndpoint(ep){
     const r=await fetch(url,{headers});
     if(r.status===401)throw{auth:true};
     if(r.status===429){await new Promise(s=>setTimeout(s,1500));continue;}
-    if(!r.ok)return{__error:r.status};
+    if(!r.ok){state.errors[ep.id]=r.status;return docs;}
     const j=await r.json();
     docs=docs.concat(j.data||[]);
     url=j.next_token?apiBase()+ep.id+'?'+p.toString()+'&next_token='+encodeURIComponent(j.next_token):null;
@@ -323,6 +323,7 @@ async function fetchEndpoint(ep){
 async function syncAll(){
   setSync('','<span class="spin"></span>syncing…');
   $('errBox').style.display='none';
+  state.errors={};
   let done=0;
   try{
     for(const ep of ENDPOINTS){
@@ -341,19 +342,40 @@ async function syncAll(){
       return;
     }
     setSync('err','network error');
-    showErr('Could not reach api.ouraring.com — check your connection. If you opened this file from claude.ai preview, download it and open in Safari instead.');
+    showErr('Could not reach the proxy or Oura — check your connection and that the Proxy URL is correct.');
     return;
   }
   setSync('ok','synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
   $('authCard').classList.add('hide');
   $('dash').classList.remove('hide');
-  renderAll();
+  try{renderAll();}
+  catch(err){setSync('err','render error');console.error(err);}
+  renderDiag();
+}
+
+function renderDiag(){
+  let box=$('diagBox');
+  if(!box){box=document.createElement('div');box.id='diagBox';box.className='card';$('dash').insertBefore(box,$('dash').firstChild);}
+  const errs=Object.entries(state.errors);
+  const counts=ENDPOINTS.map(e=>{const d=state.data[e.id];return[e.label,Array.isArray(d)?d.length:(d?1:0)]});
+  const empty=counts.filter(c=>c[1]===0).map(c=>c[0]);
+  let html='<div class="eyebrow">Sync report</div>';
+  if(errs.length){
+    const has403=errs.some(e=>e[1]===403);
+    html+='<p class="hint">Some endpoints returned an error. '+(has403?'A <b>403</b> almost always means an active Oura membership is required for that data, or that scope wasn\'t granted at sign-in.':'')+'</p>';
+    html+='<div class="contrib">'+errs.map(([k,v])=>'<div class="item"><span class="t">'+k+'</span><span class="m">HTTP '+v+'</span></div>').join('')+'</div>';
+  }else if(empty.length===ENDPOINTS.length){
+    html+='<p class="hint">Connected fine, but every endpoint came back empty for this range. Open the official Oura app to force a sync, then pull to refresh here.</p>';
+  }else{
+    html+='<p class="hint">All good — '+(counts.length-empty.length)+' of '+counts.length+' data types returned records.</p>';
+  }
+  box.innerHTML=html;
 }
 
 /* ============ SVG helpers ============ */
 function sparkline(vals,labels,color,opts={}){
   const W=520,H=opts.h||110,P=10;
-  const clean=vals.map(v=>v==null?null:+v);
+  const clean=(vals||[]).map(v=>v==null?null:+v);
   const nums=clean.filter(v=>v!=null);
   if(!nums.length)return'<div class="hint">No data in this range.</div>';
   let lo=Math.min(...nums),hi=Math.max(...nums);
@@ -408,10 +430,14 @@ function statCells(el,cells){
 
 /* ============ renderers ============ */
 const latest=a=>Array.isArray(a)&&a.length?a[a.length-1]:null;
-const series=(a,f)=>({vals:(a||[]).map(f),labels:(a||[]).map(d=>d.day?d.day.slice(5):'')});
+const A=x=>Array.isArray(x)?x:[];
+const series=(a,f)=>({vals:A(a).map(f),labels:A(a).map(d=>d.day?d.day.slice(5):'')});
 
 function renderAll(){
   const D=state.data;
+  /* raw explorer populated first so it's always available even if a card errors */
+  $('rawPick').innerHTML=ENDPOINTS.map(e=>'<option value="'+e.id+'">'+e.label+'</option>').join('');
+  showRaw($('rawPick').value);
   const dS=latest(D.daily_sleep),dR=latest(D.daily_readiness),dA=latest(D.daily_activity);
   /* hero */
   $('heroRings').innerHTML=ringGauges({sleep:dS&&dS.score,ready:dR&&dR.score,active:dA&&dA.score});
@@ -420,7 +446,7 @@ function renderAll(){
   $('heroDate').textContent=(dS&&dS.day)||(dR&&dR.day)||dstr(new Date());
 
   /* sleep */
-  const sleeps=(D.sleep||[]).filter(s=>s.type==='long_sleep'||s.type==='sleep');
+  const sleeps=A(D.sleep).filter(s=>s.type==='long_sleep'||s.type==='sleep');
   const night=latest(sleeps);
   if(night){
     $('hypno').innerHTML=hypnogram(night.sleep_phase_5_min);
@@ -490,21 +516,19 @@ function renderAll(){
 
   /* events */
   const ev=[];
-  (D.workout||[]).forEach(w=>Array.isArray(D.workout)&&ev.push({d:w.day,t:'Workout · '+(w.activity||''),m:fmtMin((new Date(w.end_datetime)-new Date(w.start_datetime))/1000)+(w.calories?' · '+Math.round(w.calories)+' kcal':'')}));
-  (D.session||[]).forEach(s=>Array.isArray(D.session)&&ev.push({d:s.day,t:'Session · '+(s.type||''),m:s.mood||''}));
-  (D.enhanced_tag||[]).forEach(t=>Array.isArray(D.enhanced_tag)&&ev.push({d:t.day,t:'Tag · '+(t.custom_name||t.tag_type_code||''),m:t.comment||''}));
+  A(D.workout).forEach(w=>ev.push({d:w.day,t:'Workout · '+(w.activity||''),m:fmtMin((new Date(w.end_datetime)-new Date(w.start_datetime))/1000)+(w.calories?' · '+Math.round(w.calories)+' kcal':'')}));
+  A(D.session).forEach(s=>ev.push({d:s.day,t:'Session · '+(s.type||''),m:s.mood||''}));
+  A(D.enhanced_tag).forEach(t=>ev.push({d:t.day,t:'Tag · '+(t.custom_name||t.tag_type_code||''),m:t.comment||''}));
   ev.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
   $('eventsList').innerHTML=ev.length?ev.slice(0,15).map(e=>'<div class="item"><span class="t">'+e.t+'</span><span class="m">'+e.d+(e.m?' · '+e.m:'')+'</span></div>').join(''):'<div class="hint">Nothing logged in this range.</div>';
 
-  /* raw explorer + footer */
-  $('rawPick').innerHTML=ENDPOINTS.map(e=>'<option value="'+e.id+'">'+e.label+'</option>').join('');
-  showRaw($('rawPick').value);
+  /* footer */
   const rc=(D.ring_configuration||[])[0]||{};
   $('whoami').textContent=[pi.email,rc.hardware_type&&('ring: '+rc.hardware_type),rc.firmware_version&&('fw '+rc.firmware_version)].filter(Boolean).join(' · ')||'nightring';
 }
 
 function hypnogram(phases){
-  if(!phases)return'<div class="hint">No stage data for this night.</div>';
+  if(!phases||!phases.length)return'<div class="hint">No stage data for this night.</div>';
   const W=520,H=120,n=phases.length,bw=W/n;
   const lvl={ '4':10,'3':38,'2':66,'1':94 };
   const col={ '4':'var(--awake)','3':'var(--rem)','2':'var(--light)','1':'var(--deep)' };
