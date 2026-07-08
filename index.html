@@ -138,6 +138,8 @@ footer{margin-top:26px;text-align:center;font-family:var(--mono);font-size:10px;
       <button id="connectBtn">Connect &amp; sync</button>
       <button class="ghost" id="forgetBtn">Forget</button>
     </div>
+    <p class="hint" style="margin-top:14px">Proxy URL (required — routes API calls around browser CORS):</p>
+    <input type="text" id="proxyInput" placeholder="https://your-worker.workers.dev" autocomplete="off">
     <label class="chk"><input type="checkbox" id="rememberChk" checked> Remember token on this device</label>
     <div class="errbox" id="errBox"></div>
   </div>
@@ -221,7 +223,7 @@ footer{margin-top:26px;text-align:center;font-family:var(--mono);font-size:10px;
 </div>
 <script>
 /* ============ config ============ */
-const API='https://api.ouraring.com/v2/usercollection/';
+const API_DIRECT='https://api.ouraring.com/v2/usercollection/'; /* replaced by apiBase() */
 const ENDPOINTS=[
  {id:'personal_info',   label:'Personal info',           mode:'none'},
  {id:'daily_sleep',     label:'Daily sleep scores',      mode:'date'},
@@ -250,8 +252,16 @@ const store={
   write(v){try{localStorage.setItem(this.k,v)}catch(e){}},
   clear(){try{localStorage.removeItem(this.k)}catch(e){}},
   readCid(){try{return localStorage.getItem('nightring_cid')}catch(e){return null}},
-  writeCid(v){try{localStorage.setItem('nightring_cid',v)}catch(e){}}
+  writeCid(v){try{localStorage.setItem('nightring_cid',v)}catch(e){}},
+  readProxy(){try{return localStorage.getItem('nightring_proxy')}catch(e){return null}},
+  writeProxy(v){try{localStorage.setItem('nightring_proxy',v)}catch(e){}}
 };
+
+/* API base: routes through the user's proxy if set, else direct (which browsers block via CORS) */
+function apiBase(){
+  const p=store.readProxy();
+  return (p?p.replace(/\/+$/,''):'https://api.ouraring.com')+'/v2/usercollection/';
+}
 
 /* ============ OAuth automation ============ */
 const SCOPES='email personal daily heartrate workout tag session spo2';
@@ -265,6 +275,8 @@ function authorizeUrl(cid){
 }
 function startOAuth(){
   const cid=($('clientIdInput').value||store.readCid()||'').trim();
+  const px=($('proxyInput').value||store.readProxy()||'').trim();
+  if(px)store.writeProxy(px);
   if(!cid){showErr('Paste your Client ID once — get it from cloud.ouraring.com/oauth/applications.');return;}
   store.writeCid(cid);
   location.href=authorizeUrl(cid);
@@ -284,7 +296,7 @@ async function fetchEndpoint(ep){
   const headers={Authorization:'Bearer '+state.token};
   let url,docs=[];
   if(ep.mode==='none'){
-    const r=await fetch(API+ep.id,{headers});
+    const r=await fetch(apiBase()+ep.id,{headers});
     if(r.status===401)throw{auth:true};
     if(!r.ok)return{__error:r.status};
     const j=await r.json();
@@ -294,7 +306,7 @@ async function fetchEndpoint(ep){
   const p=new URLSearchParams();
   if(ep.mode==='date'){p.set('start_date',dstr(daysAgo(days)));p.set('end_date',dstr(daysAgo(-1)));}
   else{p.set('start_datetime',daysAgo(days).toISOString());p.set('end_datetime',new Date().toISOString());}
-  url=API+ep.id+'?'+p.toString();
+  url=apiBase()+ep.id+'?'+p.toString();
   let guard=0;
   while(url&&guard++<25){
     const r=await fetch(url,{headers});
@@ -303,7 +315,7 @@ async function fetchEndpoint(ep){
     if(!r.ok)return{__error:r.status};
     const j=await r.json();
     docs=docs.concat(j.data||[]);
-    url=j.next_token?API+ep.id+'?'+p.toString()+'&next_token='+encodeURIComponent(j.next_token):null;
+    url=j.next_token?apiBase()+ep.id+'?'+p.toString()+'&next_token='+encodeURIComponent(j.next_token):null;
   }
   return docs;
 }
@@ -516,6 +528,8 @@ function showRaw(id){
 /* ============ wiring ============ */
 $('oauthBtn').onclick=startOAuth;
 $('connectBtn').onclick=()=>{
+  const px=($('proxyInput').value||store.readProxy()||'').trim();
+  if(px)store.writeProxy(px);
   const t=$('tokenInput').value.trim();
   if(!t){showErr('Paste a token first.');return;}
   state.token=t;
@@ -538,6 +552,8 @@ document.querySelectorAll('#rangePick button').forEach(b=>b.onclick=()=>{
 (function(){
   const cid=store.readCid();
   if(cid)$('clientIdInput').value=cid;
+  const px=store.readProxy();
+  if(px)$('proxyInput').value=px;
   const m=location.hash.match(/access_token=([^&]+)/);
   if(m){state.token=decodeURIComponent(m[1]);store.write(state.token);history.replaceState(null,'',location.pathname);syncAll();return;}
   const saved=store.read();
