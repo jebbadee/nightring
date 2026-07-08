@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0A0F1E">
+<meta name="apple-mobile-web-app-title" content="Nightring">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Nightring — Oura Data Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0F1E; --panel:#111A2E; --panel2:#0D1526; --line:#1D2A47;
+  --text:#E9EEF7; --dim:#7C8AA5; --faint:#4A5773;
+  --sleep:#5CE1C6; --ready:#F2B65C; --active:#FF8573;
+  --deep:#3D6BFF; --light:#6E93FF; --rem:#9DB8FF; --awake:#2A3A5E;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  --disp:'Space Grotesk',-apple-system,system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--disp);
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  min-height:100vh;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px 80px}
+
+/* top bar */
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 2px 10px;position:sticky;top:0;background:linear-gradient(var(--bg) 75%,transparent);z-index:5}
+.brand{font-family:var(--mono);font-size:13px;letter-spacing:.18em;color:var(--dim)}
+.brand b{color:var(--text);font-weight:500}
+.syncdot{width:8px;height:8px;border-radius:50%;background:var(--faint);display:inline-block;margin-right:7px;vertical-align:1px}
+.syncdot.ok{background:var(--sleep);box-shadow:0 0 8px var(--sleep)}
+.syncdot.err{background:var(--active)}
+#syncLabel{font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* auth card */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;margin-top:14px}
+.card h2{font-size:15px;font-weight:500;letter-spacing:.02em;margin-bottom:4px}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase;margin-bottom:10px}
+.hint{font-size:12.5px;color:var(--dim);margin:8px 0 12px}
+.hint a{color:var(--sleep);text-decoration:none}
+input[type=text],input[type=password]{width:100%;background:var(--panel2);border:1px solid var(--line);
+  border-radius:10px;color:var(--text);font-family:var(--mono);font-size:13px;padding:12px;outline:none}
+input:focus{border-color:var(--sleep)}
+.row{display:flex;gap:8px;margin-top:10px}
+button{font-family:var(--disp);font-weight:500;font-size:14px;border:none;border-radius:10px;
+  padding:12px 16px;cursor:pointer;background:var(--sleep);color:#04251D;flex:1}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);flex:0 0 auto}
+button:active{transform:scale(.98)}
+label.chk{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dim);margin-top:12px}
+.errbox{display:none;margin-top:10px;font-family:var(--mono);font-size:11.5px;color:var(--active);
+  background:rgba(255,133,115,.08);border:1px solid rgba(255,133,115,.25);border-radius:10px;padding:10px}
+
+/* range picker */
+.range{display:flex;gap:6px;margin:18px 0 6px}
+.range button{flex:1;background:var(--panel);border:1px solid var(--line);color:var(--dim);font-family:var(--mono);font-size:12px;padding:9px 0;border-radius:9px}
+.range button.on{color:var(--text);border-color:var(--sleep);background:rgba(92,225,198,.07)}
+
+/* hero rings */
+.hero{display:flex;align-items:center;gap:18px;padding:22px 4px 6px}
+.hero svg{flex:0 0 auto}
+.heroStats{flex:1;display:flex;flex-direction:column;gap:10px}
+.hstat{display:flex;align-items:baseline;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:8px}
+.hstat:last-child{border-bottom:none}
+.hstat .k{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase}
+.hstat .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.k.sleep{color:var(--sleep)}.k.ready{color:var(--ready)}.k.active{color:var(--active)}
+.heroDate{font-family:var(--mono);font-size:11px;color:var(--faint);text-align:center;margin-top:2px}
+
+/* stat grids */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.stat{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+.stat .k{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;color:var(--dim);text-transform:uppercase}
+.stat .v{font-size:19px;font-weight:700;margin-top:3px;font-variant-numeric:tabular-nums}
+.stat .u{font-size:11px;color:var(--faint);font-weight:400}
+
+/* contributors */
+.contrib{margin-top:12px}
+.cbar{display:flex;align-items:center;gap:10px;margin-top:8px}
+.cbar .n{flex:0 0 128px;font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.cbar .track{flex:1;height:5px;background:var(--panel2);border-radius:3px;overflow:hidden}
+.cbar .fill{height:100%;border-radius:3px}
+.cbar .s{flex:0 0 28px;text-align:right;font-family:var(--mono);font-size:11px}
+
+/* charts */
+.chart{margin-top:12px}
+.chart svg{width:100%;height:auto;display:block}
+.chartTitle{font-family:var(--mono);font-size:10px;letter-spacing:.16em;color:var(--dim);text-transform:uppercase;margin-top:16px}
+.legend{display:flex;gap:14px;margin-top:8px;flex-wrap:wrap}
+.legend span{font-family:var(--mono);font-size:10px;color:var(--dim)}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:0}
+
+/* lists */
+.item{display:flex;justify-content:space-between;align-items:baseline;padding:10px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:none}
+.item .t{font-size:13.5px}
+.item .m{font-family:var(--mono);font-size:11px;color:var(--dim)}
+
+/* raw explorer */
+select{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--text);
+  font-family:var(--mono);font-size:13px;padding:12px;-webkit-appearance:none}
+pre{background:#070C18;border:1px solid var(--line);border-radius:12px;padding:12px;margin-top:10px;
+  font-family:var(--mono);font-size:10.5px;color:#A9C1E8;overflow-x:auto;max-height:340px;overflow-y:auto;white-space:pre-wrap;word-break:break-word}
+.count{font-family:var(--mono);font-size:10px;color:var(--faint);margin-top:6px}
+
+.hide{display:none!important}
+.spin{display:inline-block;width:12px;height:12px;border:2px solid var(--faint);border-top-color:var(--sleep);border-radius:50%;animation:sp 1s linear infinite;vertical-align:-2px;margin-right:6px}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+footer{margin-top:26px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">NIGHT<b>RING</b></div>
+    <div><span class="syncdot" id="dot"></span><span id="syncLabel">not connected</span></div>
+  </div>
+
+  <!-- AUTH -->
+  <div class="card" id="authCard">
+    <div class="eyebrow">Connect</div>
+    <h2>Link your Oura account</h2>
+    <p class="hint">One-time setup: register a free app at <a href="https://cloud.ouraring.com/oauth/applications" target="_blank" rel="noopener">cloud.ouraring.com/oauth/applications</a> with this page's URL as the redirect URI and client-side authentication enabled. Paste its Client ID below once — after that, connecting and renewing is one tap.</p>
+    <input type="text" id="clientIdInput" placeholder="client ID (saved after first use)" autocomplete="off">
+    <div class="row">
+      <button id="oauthBtn">Sign in with Oura</button>
+    </div>
+    <p class="hint" style="margin-top:14px">Or paste an access token directly:</p>
+    <input type="password" id="tokenInput" placeholder="paste access token" autocomplete="off">
+    <div class="row">
+      <button id="connectBtn">Connect &amp; sync</button>
+      <button class="ghost" id="forgetBtn">Forget</button>
+    </div>
+    <label class="chk"><input type="checkbox" id="rememberChk" checked> Remember token on this device</label>
+    <div class="errbox" id="errBox"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dash" class="hide">
+    <div class="range" id="rangePick">
+      <button data-d="7" class="on">7D</button>
+      <button data-d="30">30D</button>
+      <button data-d="90">90D</button>
+    </div>
+
+    <div class="card">
+      <div class="eyebrow">Today</div>
+      <div class="hero">
+        <div id="heroRings"></div>
+        <div class="heroStats" id="heroStats"></div>
+      </div>
+      <div class="heroDate" id="heroDate"></div>
+    </div>
+
+    <div class="card" id="sleepCard">
+      <div class="eyebrow">Sleep · last night</div>
+      <div id="hypno" class="chart"></div>
+      <div class="legend">
+        <span><i style="background:var(--deep)"></i>Deep</span>
+        <span><i style="background:var(--light)"></i>Light</span>
+        <span><i style="background:var(--rem)"></i>REM</span>
+        <span><i style="background:var(--awake)"></i>Awake</span>
+      </div>
+      <div class="grid" id="sleepStats"></div>
+      <div class="contrib" id="sleepContrib"></div>
+    </div>
+
+    <div class="card" id="readyCard">
+      <div class="eyebrow">Readiness &amp; recovery</div>
+      <div class="grid" id="readyStats"></div>
+      <div class="chartTitle">Temperature deviation (°C)</div>
+      <div class="chart" id="tempChart"></div>
+      <div class="chartTitle">HRV — nightly average (ms)</div>
+      <div class="chart" id="hrvChart"></div>
+      <div class="chartTitle">Resting heart rate (bpm)</div>
+      <div class="chart" id="rhrChart"></div>
+      <div class="contrib" id="readyContrib"></div>
+    </div>
+
+    <div class="card" id="activityCard">
+      <div class="eyebrow">Activity</div>
+      <div class="grid" id="activityStats"></div>
+      <div class="chartTitle">Steps</div>
+      <div class="chart" id="stepsChart"></div>
+      <div class="contrib" id="activityContrib"></div>
+    </div>
+
+    <div class="card" id="vitalsCard">
+      <div class="eyebrow">Vitals &amp; long-term health</div>
+      <div class="grid" id="vitalsStats"></div>
+      <div class="chartTitle">Daytime stress vs recovery (min/day)</div>
+      <div class="chart" id="stressChart"></div>
+    </div>
+
+    <div class="card" id="eventsCard">
+      <div class="eyebrow">Workouts · sessions · tags</div>
+      <div id="eventsList"></div>
+    </div>
+
+    <div class="card">
+      <div class="eyebrow">Raw data explorer</div>
+      <p class="hint">Every endpoint the Oura API exposes, unfiltered. Pick one to inspect the JSON exactly as it comes back.</p>
+      <select id="rawPick"></select>
+      <div class="count" id="rawCount"></div>
+      <pre id="rawOut">—</pre>
+      <div class="row">
+        <button class="ghost" id="exportBtn" style="flex:1">Download everything as JSON</button>
+      </div>
+    </div>
+
+    <footer id="whoami"></footer>
+  </div>
+
+</div>
+<script>
+/* ============ config ============ */
+const API='https://api.ouraring.com/v2/usercollection/';
+const ENDPOINTS=[
+ {id:'personal_info',   label:'Personal info',           mode:'none'},
+ {id:'daily_sleep',     label:'Daily sleep scores',      mode:'date'},
+ {id:'sleep',           label:'Sleep periods (detailed)',mode:'date'},
+ {id:'daily_readiness', label:'Daily readiness',         mode:'date'},
+ {id:'daily_activity',  label:'Daily activity',          mode:'date'},
+ {id:'daily_stress',    label:'Daily stress',            mode:'date'},
+ {id:'daily_spo2',      label:'Daily SpO2',              mode:'date'},
+ {id:'daily_resilience',label:'Daily resilience',        mode:'date'},
+ {id:'daily_cardiovascular_age',label:'Cardiovascular age',mode:'date'},
+ {id:'vO2_max',         label:'VO2 max',                 mode:'date'},
+ {id:'heartrate',       label:'Heart rate (raw series)', mode:'datetime'},
+ {id:'workout',         label:'Workouts',                mode:'date'},
+ {id:'session',         label:'Sessions (moments)',      mode:'date'},
+ {id:'enhanced_tag',    label:'Tags',                    mode:'date'},
+ {id:'sleep_time',      label:'Bedtime guidance',        mode:'date'},
+ {id:'rest_mode_period',label:'Rest mode periods',       mode:'date'},
+ {id:'ring_configuration',label:'Ring hardware config',  mode:'none'}
+];
+let state={token:null,days:7,data:{}};
+
+/* ============ safe storage (works in Safari; silently skipped if sandboxed) ============ */
+const store={
+  get k(){return 'nightring_token'},
+  read(){try{return localStorage.getItem(this.k)}catch(e){return null}},
+  write(v){try{localStorage.setItem(this.k,v)}catch(e){}},
+  clear(){try{localStorage.removeItem(this.k)}catch(e){}},
+  readCid(){try{return localStorage.getItem('nightring_cid')}catch(e){return null}},
+  writeCid(v){try{localStorage.setItem('nightring_cid',v)}catch(e){}}
+};
+
+/* ============ OAuth automation ============ */
+const SCOPES='email personal daily heartrate workout tag session spo2';
+function authorizeUrl(cid){
+  const redirect=location.origin+location.pathname;
+  return 'https://cloud.ouraring.com/oauth/authorize?response_type=token'
+    +'&client_id='+encodeURIComponent(cid)
+    +'&redirect_uri='+encodeURIComponent(redirect)
+    +'&scope='+encodeURIComponent(SCOPES)
+    +'&state=nightring';
+}
+function startOAuth(){
+  const cid=($('clientIdInput').value||store.readCid()||'').trim();
+  if(!cid){showErr('Paste your Client ID once — get it from cloud.ouraring.com/oauth/applications.');return;}
+  store.writeCid(cid);
+  location.href=authorizeUrl(cid);
+}
+
+/* ============ helpers ============ */
+const $=id=>document.getElementById(id);
+const fmtMin=s=>{if(s==null)return '—';const m=Math.round(s/60);return Math.floor(m/60)+'h '+String(m%60).padStart(2,'0')+'m'};
+const fmt=(n,d=0)=>n==null?'—':Number(n).toFixed(d);
+const dstr=d=>d.toISOString().slice(0,10);
+function daysAgo(n){const d=new Date();d.setDate(d.getDate()-n);return d}
+function setSync(cls,msg){$('dot').className='syncdot '+(cls||'');$('syncLabel').innerHTML=msg}
+function showErr(msg){const b=$('errBox');b.style.display='block';b.textContent=msg}
+
+/* ============ API ============ */
+async function fetchEndpoint(ep){
+  const headers={Authorization:'Bearer '+state.token};
+  let url,docs=[];
+  if(ep.mode==='none'){
+    const r=await fetch(API+ep.id,{headers});
+    if(r.status===401)throw{auth:true};
+    if(!r.ok)return{__error:r.status};
+    const j=await r.json();
+    return j.data?j.data:[j];
+  }
+  const days=ep.id==='heartrate'?Math.min(state.days,3):state.days;
+  const p=new URLSearchParams();
+  if(ep.mode==='date'){p.set('start_date',dstr(daysAgo(days)));p.set('end_date',dstr(daysAgo(-1)));}
+  else{p.set('start_datetime',daysAgo(days).toISOString());p.set('end_datetime',new Date().toISOString());}
+  url=API+ep.id+'?'+p.toString();
+  let guard=0;
+  while(url&&guard++<25){
+    const r=await fetch(url,{headers});
+    if(r.status===401)throw{auth:true};
+    if(r.status===429){await new Promise(s=>setTimeout(s,1500));continue;}
+    if(!r.ok)return{__error:r.status};
+    const j=await r.json();
+    docs=docs.concat(j.data||[]);
+    url=j.next_token?API+ep.id+'?'+p.toString()+'&next_token='+encodeURIComponent(j.next_token):null;
+  }
+  return docs;
+}
+
+async function syncAll(){
+  setSync('','<span class="spin"></span>syncing…');
+  $('errBox').style.display='none';
+  let done=0;
+  try{
+    for(const ep of ENDPOINTS){
+      state.data[ep.id]=await fetchEndpoint(ep);
+      done++;
+      setSync('','<span class="spin"></span>'+done+'/'+ENDPOINTS.length+' '+ep.id);
+    }
+  }catch(e){
+    if(e&&e.auth){
+      store.clear();
+      const cid=store.readCid();
+      if(cid){setSync('','<span class="spin"></span>token expired — renewing…');location.href=authorizeUrl(cid);return;}
+      setSync('err','token rejected');
+      showErr('Token invalid or expired. Tap "Sign in with Oura" to get a fresh one.');
+      $('authCard').classList.remove('hide');$('dash').classList.add('hide');
+      return;
+    }
+    setSync('err','network error');
+    showErr('Could not reach api.ouraring.com — check your connection. If you opened this file from claude.ai preview, download it and open in Safari instead.');
+    return;
+  }
+  setSync('ok','synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
+  $('authCard').classList.add('hide');
+  $('dash').classList.remove('hide');
+  renderAll();
+}
+
+/* ============ SVG helpers ============ */
+function sparkline(vals,labels,color,opts={}){
+  const W=520,H=opts.h||110,P=10;
+  const clean=vals.map(v=>v==null?null:+v);
+  const nums=clean.filter(v=>v!=null);
+  if(!nums.length)return'<div class="hint">No data in this range.</div>';
+  let lo=Math.min(...nums),hi=Math.max(...nums);
+  if(opts.zero){lo=Math.min(lo,0);hi=Math.max(hi,0);}
+  if(hi===lo){hi+=1;lo-=1;}
+  const X=i=>P+(W-2*P)*(clean.length===1?0.5:i/(clean.length-1));
+  const Y=v=>H-P-(H-2*P)*((v-lo)/(hi-lo));
+  let path='',started=false;
+  clean.forEach((v,i)=>{if(v==null){started=false;return;}path+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1)+' ';started=true;});
+  const last=nums[nums.length-1];
+  let zl='';
+  if(opts.zero&&lo<0&&hi>0)zl='<line x1="'+P+'" x2="'+(W-P)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="#2A3A5E" stroke-dasharray="3 4"/>';
+  return '<svg viewBox="0 0 '+W+' '+H+'">'+zl+
+    '<path d="'+path+'" fill="none" stroke="'+color+'" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'+
+    '<text x="'+(W-P)+'" y="12" text-anchor="end" font-family="IBM Plex Mono" font-size="11" fill="'+color+'">'+fmt(last,opts.dec||0)+(opts.unit||'')+'</text>'+
+    '<text x="'+P+'" y="'+(H-1)+'" font-family="IBM Plex Mono" font-size="9" fill="#4A5773">'+(labels[0]||'')+'</text>'+
+    '<text x="'+(W-P)+'" y="'+(H-1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="#4A5773">'+(labels[labels.length-1]||'')+'</text></svg>';
+}
+function barchart(vals,labels,color){
+  const W=520,H=110,P=10;
+  const nums=vals.map(v=>v==null?0:+v);
+  if(!nums.some(v=>v>0))return'<div class="hint">No data in this range.</div>';
+  const hi=Math.max(...nums);
+  const bw=Math.max(2,(W-2*P)/nums.length-2);
+  let bars='';
+  nums.forEach((v,i)=>{const h=(H-2*P)*(v/hi);
+    bars+='<rect x="'+(P+i*((W-2*P)/nums.length)).toFixed(1)+'" y="'+(H-P-h).toFixed(1)+'" width="'+bw.toFixed(1)+'" height="'+Math.max(h,1).toFixed(1)+'" rx="1.5" fill="'+color+'" opacity="'+(i===nums.length-1?1:.55)+'"/>';});
+  return '<svg viewBox="0 0 '+W+' '+H+'">'+bars+
+    '<text x="'+(W-P)+'" y="12" text-anchor="end" font-family="IBM Plex Mono" font-size="11" fill="'+color+'">'+nums[nums.length-1].toLocaleString()+'</text>'+
+    '<text x="'+P+'" y="'+(H-1)+'" font-family="IBM Plex Mono" font-size="9" fill="#4A5773">'+(labels[0]||'')+'</text>'+
+    '<text x="'+(W-P)+'" y="'+(H-1)+'" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="#4A5773">'+(labels[labels.length-1]||'')+'</text></svg>';
+}
+function ringGauges(scores){
+  const c=110,defs=[{r:48,col:'var(--sleep)',v:scores.sleep},{r:37,col:'var(--ready)',v:scores.ready},{r:26,col:'var(--active)',v:scores.active}];
+  let s='<svg width="'+2*c/2*1.1+'" height="121" viewBox="0 0 121 121">';
+  defs.forEach(d=>{
+    const circ=2*Math.PI*d.r,frac=(d.v==null?0:d.v/100);
+    s+='<circle cx="60.5" cy="60.5" r="'+d.r+'" fill="none" stroke="#1B2742" stroke-width="7"/>';
+    s+='<circle cx="60.5" cy="60.5" r="'+d.r+'" fill="none" stroke="'+d.col+'" stroke-width="7" stroke-linecap="round" stroke-dasharray="'+(circ*frac).toFixed(1)+' '+circ.toFixed(1)+'" transform="rotate(-90 60.5 60.5)"/>';
+  });
+  return s+'</svg>';
+}
+function scoreColor(v){return v>=85?'var(--sleep)':v>=70?'var(--ready)':'var(--active)'}
+function contribBars(el,contrib){
+  if(!contrib){el.innerHTML='';return;}
+  el.innerHTML=Object.entries(contrib).map(([k,v])=>
+    '<div class="cbar"><div class="n">'+k.replace(/_/g,' ')+'</div><div class="track"><div class="fill" style="width:'+(v||0)+'%;background:'+scoreColor(v||0)+'"></div></div><div class="s" style="color:'+scoreColor(v||0)+'">'+(v==null?'—':v)+'</div></div>').join('');
+}
+function statCells(el,cells){
+  el.innerHTML=cells.map(c=>'<div class="stat"><div class="k">'+c[0]+'</div><div class="v">'+c[1]+(c[2]?' <span class="u">'+c[2]+'</span>':'')+'</div></div>').join('');
+}
+
+/* ============ renderers ============ */
+const latest=a=>Array.isArray(a)&&a.length?a[a.length-1]:null;
+const series=(a,f)=>({vals:(a||[]).map(f),labels:(a||[]).map(d=>d.day?d.day.slice(5):'')});
+
+function renderAll(){
+  const D=state.data;
+  const dS=latest(D.daily_sleep),dR=latest(D.daily_readiness),dA=latest(D.daily_activity);
+  /* hero */
+  $('heroRings').innerHTML=ringGauges({sleep:dS&&dS.score,ready:dR&&dR.score,active:dA&&dA.score});
+  $('heroStats').innerHTML=[['sleep',dS],['ready',dR],['active',dA]].map(([k,d])=>
+    '<div class="hstat"><span class="k '+k+'">'+(k==='ready'?'readiness':k==='active'?'activity':'sleep')+'</span><span class="v">'+(d&&d.score!=null?d.score:'—')+'</span></div>').join('');
+  $('heroDate').textContent=(dS&&dS.day)||(dR&&dR.day)||dstr(new Date());
+
+  /* sleep */
+  const sleeps=(D.sleep||[]).filter(s=>s.type==='long_sleep'||s.type==='sleep');
+  const night=latest(sleeps);
+  if(night){
+    $('hypno').innerHTML=hypnogram(night.sleep_phase_5_min);
+    statCells($('sleepStats'),[
+      ['Total sleep',fmtMin(night.total_sleep_duration)],
+      ['Time in bed',fmtMin(night.time_in_bed)],
+      ['Efficiency',fmt(night.efficiency),'%'],
+      ['Latency',fmtMin(night.latency)],
+      ['Deep',fmtMin(night.deep_sleep_duration)],
+      ['REM',fmtMin(night.rem_sleep_duration)],
+      ['Light',fmtMin(night.light_sleep_duration)],
+      ['Awake',fmtMin(night.awake_time)],
+      ['Avg HRV',fmt(night.average_hrv),'ms'],
+      ['Lowest HR',fmt(night.lowest_heart_rate),'bpm'],
+      ['Avg HR',fmt(night.average_heart_rate,1),'bpm'],
+      ['Breath rate',fmt(night.average_breath,1),'/min']
+    ]);
+  }else{$('hypno').innerHTML='<div class="hint">No sleep recorded in range.</div>';$('sleepStats').innerHTML='';}
+  contribBars($('sleepContrib'),dS&&dS.contributors);
+
+  /* readiness */
+  statCells($('readyStats'),[
+    ['Readiness',dR&&dR.score!=null?dR.score:'—'],
+    ['Temp deviation',dR?fmt(dR.temperature_deviation,2)+'°':'—'],
+    ['Resilience',(latest(D.daily_resilience)||{}).level?String(latest(D.daily_resilience).level).replace(/_/g,' '):'—'],
+    ['Temp trend',dR?fmt(dR.temperature_trend_deviation,2)+'°':'—']
+  ]);
+  const rSer=series(D.daily_readiness,d=>d.temperature_deviation);
+  $('tempChart').innerHTML=sparkline(rSer.vals,rSer.labels,'#F2B65C',{zero:true,dec:2,unit:'°'});
+  const hSer={vals:sleeps.map(s=>s.average_hrv),labels:sleeps.map(s=>s.day?s.day.slice(5):'')};
+  $('hrvChart').innerHTML=sparkline(hSer.vals,hSer.labels,'#5CE1C6',{unit:'ms'});
+  const rhSer={vals:sleeps.map(s=>s.lowest_heart_rate),labels:hSer.labels};
+  $('rhrChart').innerHTML=sparkline(rhSer.vals,rhSer.labels,'#FF8573',{unit:'bpm'});
+  contribBars($('readyContrib'),dR&&dR.contributors);
+
+  /* activity */
+  if(dA){
+    statCells($('activityStats'),[
+      ['Steps',(dA.steps||0).toLocaleString()],
+      ['Active cal',fmt(dA.active_calories),'kcal'],
+      ['Total burn',fmt(dA.total_calories),'kcal'],
+      ['Walk equiv',fmt((dA.equivalent_walking_distance||0)/1000,1),'km'],
+      ['High activity',fmtMin(dA.high_activity_time)],
+      ['Med activity',fmtMin(dA.medium_activity_time)],
+      ['Low activity',fmtMin(dA.low_activity_time)],
+      ['Sedentary',fmtMin(dA.sedentary_time)]
+    ]);
+  }else $('activityStats').innerHTML='<div class="hint">No activity data.</div>';
+  const aSer=series(D.daily_activity,d=>d.steps);
+  $('stepsChart').innerHTML=barchart(aSer.vals,aSer.labels,'#FF8573');
+  contribBars($('activityContrib'),dA&&dA.contributors);
+
+  /* vitals */
+  const spo=latest(D.daily_spo2),vo2=latest(D.vO2_max),cva=latest(D.daily_cardiovascular_age),
+        pi=(D.personal_info||[])[0]||{},hr=latest(D.heartrate),str=latest(D.daily_stress);
+  statCells($('vitalsStats'),[
+    ['SpO2 avg',spo&&spo.spo2_percentage?fmt(spo.spo2_percentage.average,1)+'%':'—'],
+    ['Breathing disturb.',spo&&spo.breathing_disturbance_index!=null?spo.breathing_disturbance_index:'—'],
+    ['VO2 max',vo2?fmt(vo2.vo2_max,1):'—'],
+    ['Cardio age',cva&&cva.vascular_age!=null?cva.vascular_age+(pi.age?' <span class="u">(you: '+pi.age+')</span>':''):'—'],
+    ['Last HR sample',hr?hr.bpm+' <span class="u">bpm · '+String(hr.source||'')+'</span>':'—'],
+    ['Stress today',str&&str.day_summary?String(str.day_summary).replace(/_/g,' '):'—']
+  ]);
+  const sS=series(D.daily_stress,d=>d.stress_high!=null?d.stress_high/60:null);
+  const rcS=series(D.daily_stress,d=>d.recovery_high!=null?d.recovery_high/60:null);
+  $('stressChart').innerHTML=dualLine(sS,rcS);
+
+  /* events */
+  const ev=[];
+  (D.workout||[]).forEach(w=>Array.isArray(D.workout)&&ev.push({d:w.day,t:'Workout · '+(w.activity||''),m:fmtMin((new Date(w.end_datetime)-new Date(w.start_datetime))/1000)+(w.calories?' · '+Math.round(w.calories)+' kcal':'')}));
+  (D.session||[]).forEach(s=>Array.isArray(D.session)&&ev.push({d:s.day,t:'Session · '+(s.type||''),m:s.mood||''}));
+  (D.enhanced_tag||[]).forEach(t=>Array.isArray(D.enhanced_tag)&&ev.push({d:t.day,t:'Tag · '+(t.custom_name||t.tag_type_code||''),m:t.comment||''}));
+  ev.sort((a,b)=>String(b.d).localeCompare(String(a.d)));
+  $('eventsList').innerHTML=ev.length?ev.slice(0,15).map(e=>'<div class="item"><span class="t">'+e.t+'</span><span class="m">'+e.d+(e.m?' · '+e.m:'')+'</span></div>').join(''):'<div class="hint">Nothing logged in this range.</div>';
+
+  /* raw explorer + footer */
+  $('rawPick').innerHTML=ENDPOINTS.map(e=>'<option value="'+e.id+'">'+e.label+'</option>').join('');
+  showRaw($('rawPick').value);
+  const rc=(D.ring_configuration||[])[0]||{};
+  $('whoami').textContent=[pi.email,rc.hardware_type&&('ring: '+rc.hardware_type),rc.firmware_version&&('fw '+rc.firmware_version)].filter(Boolean).join(' · ')||'nightring';
+}
+
+function hypnogram(phases){
+  if(!phases)return'<div class="hint">No stage data for this night.</div>';
+  const W=520,H=120,n=phases.length,bw=W/n;
+  const lvl={ '4':10,'3':38,'2':66,'1':94 };
+  const col={ '4':'var(--awake)','3':'var(--rem)','2':'var(--light)','1':'var(--deep)' };
+  let r='';
+  for(let i=0;i<n;i++){const p=phases[i];if(!lvl[p])continue;
+    r+='<rect x="'+(i*bw).toFixed(2)+'" y="'+lvl[p]+'" width="'+Math.max(bw-.4,.8).toFixed(2)+'" height="16" rx="1" fill="'+col[p]+'"/>';}
+  return '<svg viewBox="0 0 '+W+' '+H+'">'+r+'</svg>';
+}
+function dualLine(a,b){
+  const merged=a.vals.concat(b.vals).filter(v=>v!=null);
+  if(!merged.length)return'<div class="hint">No stress data in this range.</div>';
+  return sparkline(a.vals,a.labels,'#FF8573',{h:100})+sparkline(b.vals,b.labels,'#5CE1C6',{h:100});
+}
+function showRaw(id){
+  const d=state.data[id];
+  const arr=Array.isArray(d)?d:[d];
+  $('rawCount').textContent=(Array.isArray(d)?d.length+' records':'')+' · '+id;
+  $('rawOut').textContent=JSON.stringify(arr.slice(0,40),null,1).slice(0,60000)||'—';
+}
+
+/* ============ wiring ============ */
+$('oauthBtn').onclick=startOAuth;
+$('connectBtn').onclick=()=>{
+  const t=$('tokenInput').value.trim();
+  if(!t){showErr('Paste a token first.');return;}
+  state.token=t;
+  if($('rememberChk').checked)store.write(t);
+  syncAll();
+};
+$('forgetBtn').onclick=()=>{store.clear();state.token=null;$('tokenInput').value='';setSync('','not connected');};
+$('rawPick').onchange=e=>showRaw(e.target.value);
+$('exportBtn').onclick=()=>{
+  const blob=new Blob([JSON.stringify(state.data,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='oura-export-'+dstr(new Date())+'.json';a.click();
+};
+document.querySelectorAll('#rangePick button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('#rangePick button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');state.days=+b.dataset.d;syncAll();
+});
+
+/* boot: token from OAuth redirect hash, or saved token */
+(function(){
+  const cid=store.readCid();
+  if(cid)$('clientIdInput').value=cid;
+  const m=location.hash.match(/access_token=([^&]+)/);
+  if(m){state.token=decodeURIComponent(m[1]);store.write(state.token);history.replaceState(null,'',location.pathname);syncAll();return;}
+  const saved=store.read();
+  if(saved){state.token=saved;$('tokenInput').value=saved;syncAll();}
+})();
+</script>
+</body>
+</html>
